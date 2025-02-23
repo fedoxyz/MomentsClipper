@@ -7,10 +7,19 @@ export default function VideoClipper() {
   const [currentMarks, setCurrentMarks] = useState([]);
   const videoRef = useRef(null);
   const currentMarksRef = useRef([]);
+  const [audioFile, setAudioFile] = useState(null);
+
+  const getTotalSelectedSeconds = () => {
+    return intervals.reduce((total, [start, end]) => total + (end - start), 0);
+  };
 
   useEffect(() => {
     currentMarksRef.current = currentMarks;
   }, [currentMarks]);
+
+  const handleAudioUpload = (e) => {
+    setAudioFile(e.target.files[0]);
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -77,6 +86,9 @@ export default function VideoClipper() {
     const formData = new FormData();
     formData.append("video", videoFile);
     formData.append("intervals", intervals.map(interval => interval.join('-')).join(','));
+    if (audioFile) {
+      formData.append("audio", audioFile);
+    }
 
     try {
       const response = await fetch("http://localhost:8000/clip-video/", {
@@ -90,7 +102,7 @@ export default function VideoClipper() {
         const a = document.createElement("a");
         a.style.display = "none";
         a.href = url;
-        a.download = "clipped_video.mp4";
+        a.download = "clipped_video_with_audio.mp4";
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -107,7 +119,13 @@ export default function VideoClipper() {
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
+      <div>
+      <span>Video:</span>
       <input type="file" accept="video/*" onChange={handleFileUpload} className="mb-4" />
+      <span>Audio:</span>
+      <input type="file" accept="audio/*" onChange={handleAudioUpload} className="mb-4" />
+      </div>
+      {audioFile && <p>Audio file uploaded: {audioFile.name}</p>}
       {videoFile && (
         <div>
           <div className="flex justify-center">
@@ -141,6 +159,10 @@ export default function VideoClipper() {
                 <span>None</span>
               )}
             </div>
+          <div className="mt-4">
+            <h3 className="font-bold">Total Selected Time:</h3>
+            <span>{getTotalSelectedSeconds().toFixed(3)} seconds</span>
+          </div>
           <ul className="mt-4">
             {intervals.map(([start, end], index) => (
               <li key={index} className="flex justify-between items-center mb-2">
