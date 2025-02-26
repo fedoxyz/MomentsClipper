@@ -19,57 +19,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def create_multiple_clips(input_file, intervals, output_dir, audio_file=None, max_duration=26):
+def create_multiple_clips(input_file, intervals, output_dir, audio_file=None, max_duration=17):
     try:
         # Load video
         video = VideoFileClip(input_file)
         
         # Create individual clips
-        clips = [video.subclip(start, end) for start, end in intervals]
+        all_clips = [video.subclip(start, end) for start, end in intervals]
+        intro_clip = all_clips[0]  # Save the intro clip separately
+        content_clips = all_clips[1:]  # All other clips
         
-        def generate_combinations(clips: List[VideoFileClip], max_duration: float, max_combinations: int = 30) -> List[List[VideoFileClip]]:
-            def build_combination(available_clips: List[VideoFileClip], current_duration: float) -> List[VideoFileClip]:
-                combination = []
-                random.shuffle(available_clips)  # Shuffle clips for randomness
-                for clip in available_clips:
-                    if current_duration + clip.duration <= max_duration:
-                        combination.append(clip)
-                        current_duration += clip.duration
-                    if current_duration >= max_duration:
-                        break
-                return combination
+        # Generate random combinations
+        combinations = generate_truly_random_combinations(content_clips, max_duration, num_combinations=30)
         
-            unique_combinations = set()
-            attempts = 0
-            max_attempts = max_combinations * 10  # Arbitrary large number to prevent infinite loop
-        
-            while len(unique_combinations) < max_combinations and attempts < max_attempts:
-                new_combo = build_combination(clips.copy(), 0)
-                combo_key = tuple((clip.start, clip.end) for clip in new_combo)
-                if combo_key not in unique_combinations:
-                    unique_combinations.add(combo_key)
-                attempts += 1
-        
-            return [list(combo_key) for combo_key in unique_combinations]
-
-        # Generate all valid combinations
-        combinations = generate_combinations(clips[1:], max_duration)
-           
-        for i, combo in enumerate(combinations):
+        for i, combo_clips in enumerate(combinations):
             print(f"Processing combination {i}")
-            # Convert tuple back to list of clips if necessary
-            if isinstance(combo[0], tuple):
-                combo = [clip for clip in clips[1:] if (clip.start, clip.end) in combo]
+            print(f"Combination {i} after conversion: length={len(combo_clips)}")
             
-            print(f"Combination {i} after conversion: length={len(combo)}")
-            for j, clip in enumerate(combo):
+            for j, clip in enumerate(combo_clips):
                 print(f"  Clip {j}: type={type(clip)}, duration={getattr(clip, 'duration', 'N/A')}")
             
-            main_clip = concatenate_videoclips([clips[0]] + combo)
+            # Always start with the intro clip
+            main_clip = concatenate_videoclips([intro_clip] + combo_clips)
             print(f"Main clip created: type={type(main_clip)}, duration={getattr(main_clip, 'duration', 'N/A')}")
-            # Rest of the processing (similar to the original function)
+            
+            # Rest of the processing remains the same
             target_width, target_height = 1080, 1920
-            scale_factor = 1.4
+            scale_factor = 1.2
             transition_duration = 0.5
 
             blurred_bg = main_clip.resize((1920*2, 1080*2))
@@ -82,8 +58,8 @@ def create_multiple_clips(input_file, intervals, output_dir, audio_file=None, ma
             watermark = None
             if os.path.exists(watermark_path):
                 watermark = ImageClip(watermark_path).set_duration(main_clip.duration)
-                watermark = watermark.resize(width=int(target_width * 1.0))
-                watermark = watermark.set_position(("center", target_height * 0.81)).set_opacity(0.5)
+                watermark = watermark.resize(width=int(target_width * 0.88))
+                watermark = watermark.set_position(("center", target_height * 0.11)).set_opacity(0.9)
 
             outro_path = "assets/outro.mp4"
             outro = VideoFileClip(outro_path) if os.path.exists(outro_path) else None
@@ -129,6 +105,51 @@ def create_multiple_clips(input_file, intervals, output_dir, audio_file=None, ma
     except Exception as e:
         print(f"Error in video processing: {e}")
         raise
+
+def generate_truly_random_combinations(clips, max_duration, num_combinations=30):
+    all_combinations = []
+    attempts = 0
+    max_attempts = num_combinations * 20  # More attempts to find unique combinations
+    
+    # Track combinations we've already seen using a set of frozensets of clip indices
+    seen_combinations = set()
+    
+    while len(all_combinations) < num_combinations and attempts < max_attempts:
+        attempts += 1
+        
+        # Create a completely random permutation of the clips
+        clip_indices = list(range(len(clips)))
+        random.shuffle(clip_indices)
+        
+        # Try to fit clips by selecting them in the shuffled order
+        selected_indices = []
+        total_duration = 0
+        
+        # Add clips until we reach the max duration
+        for idx in clip_indices:
+            clip_duration = clips[idx].duration
+            if total_duration + clip_duration <= max_duration:
+                selected_indices.append(idx)
+                total_duration += clip_duration
+        
+        # We need at least one clip in a combination
+        if not selected_indices:
+            continue
+            
+        # Shuffle the selected indices again to ensure the order is random
+        random.shuffle(selected_indices)
+        
+        # Convert to a frozenset for checking uniqueness (order doesn't matter for uniqueness)
+        combo_key = frozenset(selected_indices)
+        
+        # Only add if this is a new combination
+        if combo_key not in seen_combinations:
+            seen_combinations.add(combo_key)
+            # Add the actual clips in the shuffled order
+            all_combinations.append([clips[idx] for idx in selected_indices])
+    
+    # If we didn't get enough combinations, we'll return what we have
+    return all_combinations
 
 def cleanup_temp_dir(temp_dir):
     for root, dirs, files in os.walk(temp_dir, topdown=False):

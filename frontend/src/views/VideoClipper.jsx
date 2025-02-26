@@ -117,6 +117,37 @@ export default function VideoClipper() {
     }
   };
 
+  const saveIntervalsToFile = () => {
+    const blob = new Blob([JSON.stringify(intervals)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "intervals.json";
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleLoadIntervals = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const loadedIntervals = JSON.parse(event.target.result);
+          if (Array.isArray(loadedIntervals)) {
+            setIntervals(loadedIntervals);
+          } else {
+            alert("Invalid file format");
+          }
+        } catch (error) {
+          alert("Error loading intervals");
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div>
@@ -124,6 +155,8 @@ export default function VideoClipper() {
       <input type="file" accept="video/*" onChange={handleFileUpload} className="mb-4" />
       <span>Audio:</span>
       <input type="file" accept="audio/*" onChange={handleAudioUpload} className="mb-4" />
+      <span>Intervals:</span>
+      <input type="file" accept="application/json" onChange={handleLoadIntervals} className="mb-4" />
       </div>
       {audioFile && <p>Audio file uploaded: {audioFile.name}</p>}
       {videoFile && (
@@ -145,6 +178,7 @@ export default function VideoClipper() {
           <div className="mt-4 flex justify-between">
             <button onClick={markTime} className="bg-blue-500 text-white p-2">Mark Time (X)</button>
             <button onClick={addInterval} className="bg-green-500 text-white p-2">Add Interval (C)</button>
+            <button onClick={saveIntervalsToFile} className="bg-yellow-500 text-white p-2">Save Intervals</button>
             <button onClick={downloadClippedVideo} className="bg-gray-500 text-white p-2">Download Clipped Video</button>
           </div>
             <div className="mt-4">
